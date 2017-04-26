@@ -10,6 +10,8 @@ class ChatManager:
         """
         self.active_users = []
         self.active_conversations = []
+        self.identity_keys = {} # CRYPTO: {"name": "key",} format
+        self.signed_prekeys = {} # CRYPTO: -||- format
 
     def login_user(self, user_name, password):
         """

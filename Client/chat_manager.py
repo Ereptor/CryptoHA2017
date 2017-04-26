@@ -37,6 +37,8 @@ class ChatManager:
         self.user_name = user_name  # user name of the current user
         self.password = password  # password of the current user
         self.get_msgs_thread_started = False  # message retrieval has not been started
+        self.identity_key = {} #CRYPTO: {"public" : "key", "private": "key"} format
+        self.signed_prekey = {} #CRYPTO: -||- format
 
     def login_user(self):
         '''

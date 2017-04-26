@@ -27,6 +27,9 @@ class Conversation:
         ) # message processing loop
         self.msg_process_loop.start()
         self.msg_process_loop_started = True
+        self.ephemeral_keypairs = {"name": {"private": "x", "public": "x"}} #CRYPTO
+        self.ratchet_keypairs = {"name": {"private": "x", "public": "x"}} #CRYPTO
+        self.session_keys = {"name": "key"} #CRYPTO 
 
     def append_msg_to_process(self, msg_json):
         '''
