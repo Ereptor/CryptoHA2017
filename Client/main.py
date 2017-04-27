@@ -8,6 +8,7 @@ import sys
 import os.path
 # loading user credentials from json files
 import json
+import diffie
 
 
 def main():
@@ -26,9 +27,24 @@ def main():
         # Load credentials
         credentials = json.load(credentials_file)
     try:
+        register = False
+        if "identity_key" not in credentials:
+            register = True
+            credentials["identity_key"] = diffie.generate_keys()
+            with open(sys.argv[1], "w") as cred_file:
+                json.dump(credentials, cred_file)
+
+        if "signed_prekey" not in credentials:
+            register = True
+            credentials["signed_prekey"] = diffie.generate_keys()
+            with open(sys.argv[1], "w") as cred_file:
+                json.dump(credentials, cred_file)
         # Initialize chat client with the provided credentials
         c = ChatManager(user_name=credentials["user_name"],
-                        password=credentials["password"])
+                        password=credentials["password"],
+                        identity_key=credentials["identity_key"],
+                        signed_prekey=credentials["signed_prekey"],
+                        register=register)
     except KeyError:
         # In case the JSON file is malformed
         print "Unable to get user credentials from JSON file"

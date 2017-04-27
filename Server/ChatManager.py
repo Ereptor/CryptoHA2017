@@ -1,4 +1,6 @@
 import copy
+import json
+import os.path
 from RegisteredUsers import RegisteredUsers
 from Conversation import Conversation
 
@@ -10,16 +12,26 @@ class ChatManager:
         """
         self.active_users = []
         self.active_conversations = []
-        self.identity_keys = {} # CRYPTO: {"name": "key",} format
-        self.signed_prekeys = {} # CRYPTO: -||- format
+        if not os.path.exists("keys.json"):
+            with open("keys.json", "w") as keyfile:
+                json.dump({}, keyfile)
+            self.keys = {}
+        else:
+            with open("keys.json") as keyfile:
+                self.keys = json.load(keyfile)
 
-    def login_user(self, user_name, password):
+    def login_user(self, user_name, password, keys):
         """
         Logs in a user.
         :param user_name: the user name of the user.
         :param password: the password of the user.
         :return: the user object representing the logged in user.
         """
+        if keys:
+            print "Adding keys for user " + user_name 
+            self.keys[user_name] = keys
+            with open("keys.json", "w") as keyfile:
+                json.dump(self.keys, keyfile)
 
         # search for the user among the registered users.
         current_user = None

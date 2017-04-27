@@ -86,7 +86,13 @@ class LoginHandler(JsonHandler):
         """
         user_name = self.request.arguments['user_name']
         password = self.request.arguments['password']
-        current_user = cm.login_user(user_name, password)
+        keys = {}
+
+        if "signed_prekey" in self.request.arguments:
+            keys = {"signed_prekey": self.request.arguments["signed_prekey"],
+                    "identity_key": self.request.arguments["identity_key"]}
+
+        current_user = cm.login_user(user_name, password, keys)
 
         if current_user:
             if not self.get_secure_cookie(Constants.COOKIE_NAME):

@@ -11,6 +11,7 @@ from threading import Thread
 
 import base64
 
+import diffie
 
 state = INIT  # initial state for the application
 has_requested_messages = False  # history of the next conversation will need to be downloaded and printed
@@ -20,7 +21,7 @@ class ChatManager:
     '''
     Class responsible for driving the application
     '''
-    def __init__(self, user_name="", password=""):
+    def __init__(self, user_name="", password="", identity_key={}, signed_prekey={}, register=False):
         '''
         Constructor
         :param user_name: user name of the current user
@@ -37,8 +38,9 @@ class ChatManager:
         self.user_name = user_name  # user name of the current user
         self.password = password  # password of the current user
         self.get_msgs_thread_started = False  # message retrieval has not been started
-        self.identity_key = {} #CRYPTO: {"public" : "key", "private": "key"} format
-        self.signed_prekey = {} #CRYPTO: -||- format
+        self.identity_key = identity_key #CRYPTO: {"public" : "key", "private": "key"} format
+        self.signed_prekey = signed_prekey #CRYPTO: -||- format
+        self.register = register #CRYPTO
 
     def login_user(self):
         '''
@@ -47,10 +49,11 @@ class ChatManager:
         '''
         print "Logging in..."
         # create JSON document of user credentials
-        user_data = json.dumps({
-            "user_name": self.user_name,
-            "password": self.password
-        })
+        raw_user = {"user_name": self.user_name, "password": self.password}
+        if self.register:
+            raw_user["signed_prekey"] = self.signed_prekey["public"]
+            raw_user["identity_key"] = self.identity_key["public"]
+        user_data = json.dumps(raw_user)
         try:
             # Send user credentials to the server
             req = urllib2.Request("http://" + SERVER + ":" + SERVER_PORT + "/login", data=user_data)
