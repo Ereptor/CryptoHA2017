@@ -4,6 +4,9 @@ import json
 
 from ChatManager import ChatManager
 
+from Crypto.Signature import PKCS1_v1_5 as pkcs
+from Crypto.Hash import SHA
+from Crypto.PublicKey import RSA
 
 class Constants:
     def __init__(self):
@@ -123,6 +126,22 @@ class UsersHandler(JsonHandler):
         self.response = users
         self.write_json()
 
+
+class KeyRequestHandler(JsonHandler):
+    def data_received(self, chunk):
+        pass
+    
+    def get(self, user_name):
+        keys = cm.get_public_keys(user_name)
+        if not keys:
+            print "Oups"
+            return
+        key = RSA.importKey(open("private.pem").read())
+
+        keyhash = SHA.new(str(keys["signed_prekey"]) + str(keys["identity_key"]))
+        keys["signature"] = pkcs.new(key).sign(keyhash).decode("cp437")
+        self.response = {"signed_prekey": str(keys["signed_prekey"]), "identity_key": str(keys["signed_prekey"])}
+        self.write_json()
 
 class ConversationHandler(JsonHandler):
     def data_received(self, chunk):
@@ -263,6 +282,8 @@ class ConcreteConversationHandler(JsonHandler):
         self.finish()
 
 
+
+
 def init_app():
     """
     Initializes the Tornado web app.
@@ -272,6 +293,7 @@ def init_app():
         (r"/", MainHandler),
         (r"/login", LoginHandler),
         (r"/users", UsersHandler),
+        (r"/getKeys/(\S+)", KeyRequestHandler),
         (r"/conversations", ConversationHandler),
         (r"/conversations/create", ConversationCreateHandler),
         (r"/conversations/([0-9]+)", ConcreteConversationHandler),

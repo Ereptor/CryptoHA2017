@@ -66,6 +66,14 @@ class ChatManager:
         """
         return RegisteredUsers
 
+    def get_public_keys(self, user_name):
+        """
+        Return public keys for user
+        """
+        if user_name not in self.keys:
+            return None
+        return self.keys[user_name]
+
     def create_conversation(self, participant_list):
         """
         Creates a new conversation with the specified participants.

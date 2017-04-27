@@ -12,6 +12,8 @@ from threading import Thread
 import base64
 
 import diffie
+from Crypto.Signature import PKCS1_v1_5 as pkcs
+from Crypto.PublicKey import RSA
 
 state = INIT  # initial state for the application
 has_requested_messages = False  # history of the next conversation will need to be downloaded and printed
@@ -41,6 +43,7 @@ class ChatManager:
         self.identity_key = identity_key #CRYPTO: {"public" : "key", "private": "key"} format
         self.signed_prekey = signed_prekey #CRYPTO: -||- format
         self.register = register #CRYPTO
+        self.server_public_key = RSA.importKey(open("public.pem").read())
 
     def login_user(self):
         '''
@@ -138,6 +141,7 @@ class ChatManager:
                 # Cookie has to included with every request
                 req.add_header("Cookie", self.cookie)
                 r = urllib2.urlopen(req)
+
             except urllib2.HTTPError as e:
                 print "Unable to create conversation, server returned HTTP", e.code, e.msg
                 return
@@ -340,7 +344,10 @@ class ChatManager:
                             print "Entered conversation ID is not a number"
                             continue
                         self.current_conversation = Conversation(c_id, self)
-                        self.current_conversation.setup_conversation()
+                        self.current_conversation.setup_conversation(
+                            identity_secret=self.identity_key["private"],
+                            signed_secret=self.signed_prekey["private"],
+                            cookie=self.cookie)
                     except urllib2.HTTPError as e:
                         print "Unable to determine validity of conversation ID, server returned HTTP", e.code, e.msg
                         continue

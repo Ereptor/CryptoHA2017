@@ -2,6 +2,10 @@ from message import Message
 import base64
 from time import sleep
 from threading import Thread
+import urllib2
+import json
+
+import diffie
 
 class Conversation:
     '''
@@ -27,9 +31,8 @@ class Conversation:
         ) # message processing loop
         self.msg_process_loop.start()
         self.msg_process_loop_started = True
-        self.ephemeral_keypairs = {"name": {"private": "x", "public": "x"}} #CRYPTO
         self.ratchet_keypairs = {"name": {"private": "x", "public": "x"}} #CRYPTO
-        self.session_keys = {"name": "key"} #CRYPTO 
+        self.session_keys = {} #CRYPTO 
 
     def append_msg_to_process(self, msg_json):
         '''
@@ -96,7 +99,7 @@ class Conversation:
                     self.last_processed_msg_id = msg_id
                 sleep(0.01)
 
-    def setup_conversation(self):
+    def setup_conversation(self, identity_secret, signed_secret, cookie):
         '''
         Prepares the conversation for usage
         :return:
@@ -109,7 +112,22 @@ class Conversation:
         # you can do that with self.process_outgoing_message("...") or whatever you may want to send here...
 
         # Since there is no crypto in the current version, no preparation is needed, so do nothing
-        # replace this with anything needed for your key exchange 
+        # replace this with anything needed for your key exchange
+        
+        for participant in self.manager.get_other_users():
+        # Get keys for participants:
+            req = urllib2.Request("http://" + "localhost" + ":" + "8888" + "/getKeys/" + participant)
+            req.add_header("Cookie", cookie)
+            r = urllib2.urlopen(req)
+            string = r.read()
+            keys = json.loads(string)
+            diffie1 = diffie.derive_shared_secret(identity_secret,
+                int(keys["signed_prekey"]))
+            diffie2 = diffie.derive_shared_secret(signed_secret,
+                int(keys["identity_key"]))
+            self.session_keys[participant] = str(diffie1) + str(diffie2)
+                
+        print self.session_keys
         pass
 
 
