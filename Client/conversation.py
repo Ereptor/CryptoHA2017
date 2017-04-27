@@ -126,8 +126,6 @@ class Conversation:
             diffie2 = diffie.derive_shared_secret(signed_secret,
                 int(keys["identity_key"]))
             self.session_keys[participant] = str(diffie1) + str(diffie2)
-                
-        print self.session_keys
         pass
 
 
