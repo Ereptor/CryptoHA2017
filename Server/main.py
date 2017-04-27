@@ -140,7 +140,7 @@ class KeyRequestHandler(JsonHandler):
 
         keyhash = SHA.new(str(keys["signed_prekey"]) + str(keys["identity_key"]))
         keys["signature"] = pkcs.new(key).sign(keyhash).decode("cp437")
-        self.response = {"signed_prekey": str(keys["signed_prekey"]), "identity_key": str(keys["signed_prekey"])}
+        self.response = {"signed_prekey": str(keys["signed_prekey"]), "identity_key": str(keys["identity_key"])}
         self.write_json()
 
 class ConversationHandler(JsonHandler):
