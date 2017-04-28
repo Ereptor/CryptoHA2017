@@ -14,6 +14,7 @@ import base64
 import diffie
 from Crypto.Signature import PKCS1_v1_5 as pkcs
 from Crypto.PublicKey import RSA
+from Crypto.Hash import SHA
 
 state = INIT  # initial state for the application
 has_requested_messages = False  # history of the next conversation will need to be downloaded and printed
@@ -70,8 +71,21 @@ class ChatManager:
                     cookie_found = True
             if cookie_found == True:
                 # Cookie found, login successful
-                self.is_logged_in = True
-                print "Login successful"
+                req = urllib2.Request("http://" + SERVER  + ":" + SERVER_PORT + "/getKeys/" + self.user_name)
+                req.add_header("Cookie", self.cookie)
+                r = urllib2.urlopen(req)
+                string = r.read()
+                keys = json.loads(string)
+                keyhash = SHA.new(keys["signed_prekey"] + keys["identity_key"])
+                publicKey = RSA.importKey(open("public.pem").read())
+                verifier = pkcs.new(publicKey)
+                if(verifier.verify(keyhash, base64.b64decode(keys["signature"]))):
+                    self.is_logged_in = True
+                    print "Login successful"
+                else:
+                    self.user_name=""
+                    self.password=""
+                    print "Public key exchange is unsuccessful"
             else:
                 # No cookie, login unsuccessful
                 self.user_name = ""
