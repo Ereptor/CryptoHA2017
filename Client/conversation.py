@@ -4,8 +4,9 @@ from time import sleep
 from threading import Thread
 import urllib2
 import json
-
+import rachet
 import diffie
+
 
 class Conversation:
     '''
@@ -159,6 +160,8 @@ class Conversation:
         :param msg_raw: raw message
         :return: message to be sent to the server
         '''
+
+        rachet.get_chain_and_message_key(self.manager.password)
 
         # if the message has been typed into the console, record it, so it is never printed again during chatting
         if originates_from_console == True:
