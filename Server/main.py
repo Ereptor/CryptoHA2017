@@ -5,6 +5,7 @@ import json
 from ChatManager import ChatManager
 
 from Crypto.Signature import PKCS1_v1_5 as pkcs
+from base64 import b64encode
 from Crypto.Hash import SHA
 from Crypto.PublicKey import RSA
 
@@ -134,13 +135,16 @@ class KeyRequestHandler(JsonHandler):
     def get(self, user_name):
         keys = cm.get_public_keys(user_name)
         if not keys:
-            print "Oups"
+            print "Requested user " + user_name + " does not have registered public keys"
             return
+
         key = RSA.importKey(open("private.pem").read())
 
-        keyhash = SHA.new(str(keys["signed_prekey"]) + str(keys["identity_key"]))
-        keys["signature"] = pkcs.new(key).sign(keyhash).decode("cp437")
-        self.response = {"signed_prekey": str(keys["signed_prekey"]), "identity_key": str(keys["identity_key"])}
+        keys["signed_prekey"] = str(keys["signed_prekey"])
+        keys["identity_key"] = str(keys["identity_key"])
+        keyhash = SHA.new(keys["signed_prekey"] + keys["identity_key"])
+        keys["signature"] = b64encode(pkcs.new(key).sign(keyhash))
+        self.response = keys
         self.write_json()
 
 class ConversationHandler(JsonHandler):

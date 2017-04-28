@@ -6,6 +6,9 @@ import urllib2
 import json
 
 import diffie
+from Crypto.Signature import PKCS1_v1_5 as pkcs
+from Crypto.Hash import SHA
+from Crypto.PublicKey import RSA
 
 class Conversation:
     '''
@@ -115,12 +118,22 @@ class Conversation:
         # replace this with anything needed for your key exchange
         
         for participant in self.manager.get_other_users():
-        # Get keys for participants:
-            req = urllib2.Request("http://" + "localhost" + ":" + "8888" + "/getKeys/" + participant)
-            req.add_header("Cookie", cookie)
-            r = urllib2.urlopen(req)
-            string = r.read()
-            keys = json.loads(string)
+        # Get keys for participants in loop until right signature is returned:
+            while True:
+                req = urllib2.Request("http://" + "localhost" + ":" + "8888" + "/getKeys/" + participant)
+                req.add_header("Cookie", cookie)
+                r = urllib2.urlopen(req)
+                string = r.read()
+                keys = json.loads(string)
+                
+                keyhash = SHA.new(keys["signed_prekey"] + keys["identity_key"])
+                publicKey = RSA.importKey(open("public.pem").read())
+                verifier = pkcs.new(publicKey)
+                if(verifier.verify(keyhash, base64.b64decode(keys["signature"]))):
+                    break
+                else:
+                    print "Possibly faked keys returned for user " + participant + ", retrying..."
+
             diffie1 = diffie.derive_shared_secret(identity_secret,
                 int(keys["signed_prekey"]))
             diffie2 = diffie.derive_shared_secret(signed_secret,
