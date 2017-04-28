@@ -9,6 +9,7 @@ import diffie
 from Crypto.Signature import PKCS1_v1_5 as pkcs
 from Crypto.Hash import SHA
 from Crypto.PublicKey import RSA
+from config import *
 
 class Conversation:
     '''
@@ -120,7 +121,7 @@ class Conversation:
         for participant in self.manager.get_other_users():
         # Get keys for participants in loop until right signature is returned:
             while True:
-                req = urllib2.Request("http://" + "localhost" + ":" + "8888" + "/getKeys/" + participant)
+                req = urllib2.Request("http://" + SERVER  + ":" + SERVER_PORT + "/getKeys/" + participant)
                 req.add_header("Cookie", cookie)
                 r = urllib2.urlopen(req)
                 string = r.read()
