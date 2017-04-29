@@ -148,7 +148,6 @@ class Conversation:
         else:
             with open(conversationkey_path, "r") as con_keys:
                 self.my_ratchet_keys = json.load(con_keys)
-        print self.get_my_ratchet_key_for_id(0)
 
 
     def update_last_ratchet_key(self, user_name, key):
