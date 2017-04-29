@@ -4,7 +4,10 @@ from time import sleep
 from threading import Thread
 import urllib2
 import json
-import rachet
+import random
+from Crypto.Protocol import KDF
+import os.path
+
 import diffie
 from Crypto.Signature import PKCS1_v1_5 as pkcs
 from Crypto.Hash import SHA
@@ -36,7 +39,8 @@ class Conversation:
         ) # message processing loop
         self.msg_process_loop.start()
         self.msg_process_loop_started = True
-        self.ratchet_keypairs = {"name": {"private": "x", "public": "x"}} #CRYPTO
+        self.ratchet_keys = {} #CRYPTO
+        self.my_ratchet_keys = {}
         self.session_keys = {} #CRYPTO 
 
     def append_msg_to_process(self, msg_json):
@@ -141,8 +145,56 @@ class Conversation:
             diffie2 = diffie.derive_shared_secret(signed_secret,
                 int(keys["identity_key"]))
             self.session_keys[participant] = str(diffie1) + str(diffie2)
-        pass
+        conversationkey_path = "conversationkeys_"+str(self.id)+".json"
+        if not os.path.exists(conversationkey_path):
+            self.update_my_ratchet_key(diffie.generate_keys(), 0)
+        else:
+            with open(conversationkey_path, "r") as con_keys:
+                self.my_ratchet_keys = json.load(con_keys)
 
+
+    def update_last_ratchet_key(self, user_name, key):
+        """ Update ratchet key list with last seen key for user """
+        self.ratchet_keys[user_name] = key
+
+    def update_my_ratchet_key(self, key, m_id):
+        """
+        key = {"public": x, "private": y}
+        m_id: ratchet key is valid from this message
+        """
+        self.my_ratchet_keys[m_id] = key
+        with open("conversationkeys_"+str(self.id)+".json", "w") as keys_file:
+            json.dump(self.my_ratchet_keys, keys_file)
+
+    def get_my_ratchet_key_for_id(self, m_id):
+        if m_id < 0:
+            return None
+        keys = sorted(self.my_ratchet_keys.keys())
+        for i in range(0, len(keys)):
+            if m_id < keys[i]:
+                return self.my_ratchet_keys[keys[i-1]]
+        return self.my_ratchet_keys[keys[-1]]
+
+    def get_last_ratchet_key(self, user_name):
+        """ Return last ratchet key seen for user (None if it's the first) """
+        if not user_name in self.ratchet_keys:
+            return None
+        return self.ratchet_keys[user_name]
+
+    def get_keys_to_symmetric_ratchet(self, key):
+        """Use this function to get root key and chain key0 from session key or to get new chain key and message key from old chain key"""
+        salt = ''.join(random.choice('0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz') for i in range(32))
+        kdf = KDF.PBKDF2(key, salt, 32)
+        key1 = kdf[:16]
+        key2 = kdf[16:]
+        return key1, key2
+
+    def get_keys_to_asymmetric_ratchet(self, key1, key2):
+        """Use this function to get a temporary key and chain key or new root key and a new sender chain key"""
+        kdf = KDF.PBKDF2(key1, key2, 32)
+        new_key1 = kdf[:16]
+        new_key2 = kdf[16:]
+        return new_key1, new_key2
 
     def process_incoming_message(self, msg_raw, msg_id, owner_str):
         '''
@@ -172,8 +224,6 @@ class Conversation:
         :param msg_raw: raw message
         :return: message to be sent to the server
         '''
-
-        rachet.get_chain_and_message_key(self.manager.password)
 
         # if the message has been typed into the console, record it, so it is never printed again during chatting
         if originates_from_console == True:

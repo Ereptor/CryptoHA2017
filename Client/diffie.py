@@ -1,4 +1,6 @@
 from Crypto.Random import random
+from Crypto.Hash import SHA
+import base64
 
 DIFFIE_P = int('0xFFFFFFFFFFFFFFFFC90FDAA22168C234C4C6628B80DC1CD129024E088A67'
                     'CC74020BBEA63B139B22514A08798E3404DDEF9519B3CD3A431B302B0A6DF2'
@@ -29,9 +31,20 @@ DIFFIE_P = int('0xFFFFFFFFFFFFFFFFC90FDAA22168C234C4C6628B80DC1CD129024E088A67'
 DIFFIE_G = 2
 
 def generate_keys():
+    """ Generate two *very long* numbers as private and public keys """
     private_key = random.randint(0, DIFFIE_P - 1)
     public_key = pow(DIFFIE_G, private_key, DIFFIE_P)
     return {"private": private_key, "public": public_key}
 
 def derive_shared_secret(private, r_public):
-    return pow(r_public, private, DIFFIE_P)
+    """ Return a 16 byte shared secret as a string """
+    shared = pow(r_public, private, DIFFIE_P)
+    str_shared = str(shared) + "0000000000000000"
+    h = SHA.new()
+    h.update(str_shared)
+    return base64.b64encode(bytearray.fromhex(h.hexdigest()))[:16]
+
+def test():
+    key1 = generate_keys()
+    key2 = generate_keys()
+    return derive_shared_secret(key1["private"], key2["public"])
