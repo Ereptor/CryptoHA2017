@@ -352,15 +352,17 @@ class Conversation:
         return len(self.all_messages)
 
     def increase_sent_counter(self):
-        with open("counterconversation_" + str(self.id) + ".json", "r+") as counter_file:
+        with open("counterconversation_" + str(self.id) + ".json", "r") as counter_file:
             count_dict = json.load(counter_file)
             count_dict["sent"] += 1
+        with open("counterconversation_" + str(self.id) + ".json", "w") as counter_file:
             json.dump(count_dict, counter_file)
 
     def increase_received_counter(self):
-        with open("counterconversation_" + str(self.id) + ".json", "r+") as counter_file:
+        with open("counterconversation_" + str(self.id) + ".json", "r") as counter_file:
             count_dict = json.load(counter_file)
             count_dict["received"] += 1
+        with open("counterconversation_" + str(self.id) + ".json", "w") as counter_file:
             json.dump(count_dict, counter_file)
 
     def get_sent_counter(self):
