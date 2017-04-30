@@ -235,7 +235,8 @@ class Conversation:
 
             counter = decoded_msg[:10]
             iv = decoded_msg[10:26]
-            secret_msg = decoded_msg[26:]
+            secret_msg = decoded_msg[26:-AES.block_size]
+            mac = decoded_msg[-AES.block_size:]
 
             rec_cntr = self.get_received_counter()
 
@@ -250,13 +251,22 @@ class Conversation:
                 self.increase_received_counter()
 
                 cipher = AES.new(self.msg_keys[owner_str], AES.MODE_CBC, iv)
+
                 msg = cipher.decrypt(secret_msg)
 
                 # remove padding
                 plain_msg = msg[:len(msg) - ord(msg[-1])]
 
-                # print message and add it to the list of printed messages
-                self.print_message(msg_raw=plain_msg, owner_str=owner_str)
+                # padding_mac
+                content = decoded_msg[:-AES.block_size]
+                plength = AES.block_size - (len(content) % AES.block_size)
+                content += chr(plength) * plength
+
+                if mac == cipher.encrypt(content)[-AES.block_size:]:
+                    # print message and add it to the list of printed messages
+                    self.print_message(msg_raw=plain_msg, owner_str=owner_str)
+                else:
+                    self.print_message(msg_raw="Mac error!", owner_str="Admin")
             else:
                 self.print_message(msg_raw="Receive counter error!", owner_str="Admin")
 
@@ -295,14 +305,18 @@ class Conversation:
         plength = AES.block_size - (len(msg_raw) % AES.block_size)
         msg_raw += chr(plength) * plength
 
-        e_msg = iv + cipher.encrypt(msg_raw)
-
         sent = self.get_sent_counter()
         cntr_pad = 10 - len(str(sent))
 
-        msg = (str(sent) + "x" * cntr_pad) + e_msg
+        msg = (str(sent) + "x" * cntr_pad) + iv + cipher.encrypt(msg_raw)
 
-        encoded_msg = base64.encodestring(msg)
+        # padding_mac
+        plength = AES.block_size - (len(msg) % AES.block_size)
+        msg_mac = msg + chr(plength) * plength
+
+        mac = cipher.encrypt(msg_mac)[-AES.block_size:]
+
+        encoded_msg = base64.encodestring(msg + mac)
 
         # post the message to the conversation
         self.manager.post_message_to_conversation(encoded_msg)
