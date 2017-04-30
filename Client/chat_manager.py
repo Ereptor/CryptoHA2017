@@ -104,6 +104,7 @@ class ChatManager:
             self.password = ""
             self.is_logged_in = False
 
+
     def create_conversation(self):
         '''
         Requests the creation of a new conversation on the server
@@ -162,7 +163,11 @@ class ChatManager:
             except urllib2.URLError as e:
                 print "Unable to create conversation, reason:", e.message
                 return
-            print "Conversation created"
+
+            print "Conversation created\n"
+            print "Conversations: \n"
+
+            self.get_my_conversations()
         else:
             print "Please log in before creating new conversations"
             state = INIT
@@ -203,7 +208,6 @@ class ChatManager:
             print "Please log in before accessing Your conversations"
             state = INIT
         
-
     def get_my_conversations(self):
         '''
         Retrieves all the conversations (their IDs and participant lists) that the current user is a participant of
@@ -344,8 +348,14 @@ class ChatManager:
                 elif state == SELECT_CONVERSATION:
                     # User wants to enter a conversation
                     try:
+
+                        print "Conversations: \n"
+
+                        self.get_my_conversations()
+
                         # Read the conversation ID supplied by the user
                         conversation_id = raw_input("Which conversation do you wish to join? ")
+
                         # Check whether the supplied ID is valid
                         req = urllib2.Request("http://" + SERVER + ":" + SERVER_PORT + "/conversations/" +
                                               conversation_id + "/")
