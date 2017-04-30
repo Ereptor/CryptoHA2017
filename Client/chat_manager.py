@@ -20,6 +20,7 @@ state = INIT  # initial state for the application
 has_requested_messages = False  # history of the next conversation will need to be downloaded and printed
 
 
+
 class ChatManager:
     '''
     Class responsible for driving the application
@@ -45,6 +46,7 @@ class ChatManager:
         self.signed_prekey = signed_prekey #CRYPTO: -||- format
         self.register = register #CRYPTO
         self.server_public_key = RSA.importKey(open("public.pem").read())
+        self.self_made_conversation = []
 
     def login_user(self):
         '''
@@ -75,10 +77,12 @@ class ChatManager:
                 req.add_header("Cookie", self.cookie)
                 r = urllib2.urlopen(req)
                 string = r.read()
+
                 keys = json.loads(string)
                 keyhash = SHA.new(keys["signed_prekey"] + keys["identity_key"])
-                publicKey = RSA.importKey(open("public.pem").read())
+                publicKey = RSA.importKey(open("public.pem").read()) # server public key
                 verifier = pkcs.new(publicKey)
+
                 if(verifier.verify(keyhash, base64.b64decode(keys["signature"]))):
                     self.is_logged_in = True
                     print "Login successful"
@@ -103,7 +107,6 @@ class ChatManager:
             self.user_name = ""
             self.password = ""
             self.is_logged_in = False
-
 
     def create_conversation(self):
         '''
@@ -165,6 +168,11 @@ class ChatManager:
                 return
 
             print "Conversation created\n"
+
+            string = r.read()
+            id = json.loads(string)
+            self.self_made_conversation.append(id[0]["id"])
+
             print "Conversations: \n"
 
             self.get_my_conversations()

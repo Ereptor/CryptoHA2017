@@ -14,11 +14,15 @@ from Crypto.Hash import SHA
 from Crypto.PublicKey import RSA
 from config import *
 
+from Crypto.Cipher import AES
+from Crypto import Random
+
 
 class Conversation:
     '''
     Represents a conversation between participants
     '''
+
     def __init__(self, c_id, manager):
         '''
         Constructor
@@ -32,16 +36,20 @@ class Conversation:
         self.last_processed_msg_id = 0  # ID of the last processed message
         from chat_manager import ChatManager
         assert isinstance(manager, ChatManager)
-        self.manager = manager # chat manager for sending messages
+        self.manager = manager  # chat manager for sending messages
         self.run_infinite_loop = True
         self.msg_process_loop = Thread(
             target=self.process_all_messages
-        ) # message processing loop
+        )  # message processing loop
         self.msg_process_loop.start()
         self.msg_process_loop_started = True
-        self.ratchet_keys = {} #CRYPTO
+
+        self.ratchet_keys = {}  # CRYPTO
         self.my_ratchet_keys = {}
-        self.session_keys = {} #CRYPTO 
+        self.session_keys = {}  # CRYPTO
+        self.root_keys = {}  # CRYPTO
+        self.chain_keys = {}  # CRYPTO
+        self.msg_keys = {}
 
     def append_msg_to_process(self, msg_json):
         '''
@@ -122,36 +130,59 @@ class Conversation:
 
         # Since there is no crypto in the current version, no preparation is needed, so do nothing
         # replace this with anything needed for your key exchange
-        
+
         for participant in self.manager.get_other_users():
-        # Get keys for participants in loop until right signature is returned:
+            # Get keys for participants in loop until right signature is returned:
             while True:
-                req = urllib2.Request("http://" + SERVER  + ":" + SERVER_PORT + "/getKeys/" + participant)
+                req = urllib2.Request("http://" + SERVER + ":" + SERVER_PORT + "/getKeys/" + participant)
                 req.add_header("Cookie", cookie)
                 r = urllib2.urlopen(req)
                 string = r.read()
+
                 keys = json.loads(string)
-                
                 keyhash = SHA.new(keys["signed_prekey"] + keys["identity_key"])
                 publicKey = RSA.importKey(open("public.pem").read())
                 verifier = pkcs.new(publicKey)
-                if(verifier.verify(keyhash, base64.b64decode(keys["signature"]))):
+                if (verifier.verify(keyhash, base64.b64decode(keys["signature"]))):
                     break
                 else:
                     print "Possibly faked keys returned for user " + participant + ", retrying..."
 
             diffie1 = diffie.derive_shared_secret(identity_secret,
-                int(keys["signed_prekey"]))
+                                                  int(keys["signed_prekey"]))
+
             diffie2 = diffie.derive_shared_secret(signed_secret,
-                int(keys["identity_key"]))
-            self.session_keys[participant] = str(diffie1) + str(diffie2)
-        conversationkey_path = "conversationkeys_"+str(self.id)+".json"
+                                                  int(keys["identity_key"]))
+
+            if self.id in self.manager.self_made_conversation:
+                self.session_keys[participant] = str(diffie1) + str(diffie2)
+            else:
+                self.session_keys[participant] = str(diffie2) + str(diffie1)
+
+            print participant + " : " + self.session_keys[participant]
+
+        conversationkey_path = "conversationkeys_" + str(self.id) + ".json"
         if not os.path.exists(conversationkey_path):
             self.update_my_ratchet_key(diffie.generate_keys(), 0)
         else:
             with open(conversationkey_path, "r") as con_keys:
                 self.my_ratchet_keys = json.load(con_keys)
 
+    def setup_pairwaise(self, part_a, part_b, sender_key):
+
+        return
+
+    def setup_group_conversation(self):
+
+        participants = self.manager.get_other_users()
+
+        sender_key = 0
+
+        for participant in participants:
+            if participant != self.manager.user_name:
+                self.setup_pairwaise(self.manager.user_name, participant, sender_key)
+
+        return
 
     def update_last_ratchet_key(self, user_name, key):
         """ Update ratchet key list with last seen key for user """
@@ -163,7 +194,7 @@ class Conversation:
         m_id: ratchet key is valid from this message
         """
         self.my_ratchet_keys[m_id] = key
-        with open("conversationkeys_"+str(self.id)+".json", "w") as keys_file:
+        with open("conversationkeys_" + str(self.id) + ".json", "w") as keys_file:
             json.dump(self.my_ratchet_keys, keys_file)
 
     def get_my_ratchet_key_for_id(self, m_id):
@@ -172,7 +203,7 @@ class Conversation:
         keys = sorted(self.my_ratchet_keys.keys())
         for i in range(0, len(keys)):
             if m_id < keys[i]:
-                return self.my_ratchet_keys[keys[i-1]]
+                return self.my_ratchet_keys[keys[i - 1]]
         return self.my_ratchet_keys[keys[-1]]
 
     def get_last_ratchet_key(self, user_name):
@@ -183,8 +214,8 @@ class Conversation:
 
     def get_keys_to_symmetric_ratchet(self, key):
         """Use this function to get root key and chain key0 from session key or to get new chain key and message key from old chain key"""
-        salt = ''.join(random.choice('0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz') for i in range(32))
-        kdf = KDF.PBKDF2(key, salt, 32)
+
+        kdf = KDF.PBKDF2(key, "saltsalt", 32)
         key1 = kdf[:16]
         key2 = kdf[16:]
         return key1, key2
@@ -207,15 +238,34 @@ class Conversation:
         :return: None
         '''
 
-        # process message here
-		# example is base64 decoding, extend this with any crypto processing of your protocol
-        decoded_msg = base64.decodestring(msg_raw)
+        if self.manager.user_name != owner_str:
+            # process message here
+            # example is base64 decoding, extend this with any crypto processing of your protocol
+            decoded_msg = base64.decodestring(msg_raw)
 
-        # print message and add it to the list of printed messages
-        self.print_message(
-            msg_raw=decoded_msg,
-            owner_str=owner_str
-        )
+            raw_msg = decoded_msg.split("|")
+
+            other_pik = raw_msg[0]
+            other_pspk = raw_msg[1]
+            counter = raw_msg[2]
+            e_msg = raw_msg[3]
+            iv = e_msg[:16]
+            secret_msg = e_msg[16:]
+
+            self.msg_keys[owner_str], self.chain_keys[owner_str] = self.get_keys_to_symmetric_ratchet(
+                self.session_keys[owner_str])
+
+            print  "msg: " + self.msg_keys[owner_str]
+            print  "chain: " + self.chain_keys[owner_str]
+
+            cipher = AES.new(self.msg_keys[owner_str], AES.MODE_CFB, iv)
+            msg = cipher.decrypt(secret_msg)
+
+            # print message and add it to the list of printed messages
+            self.print_message(
+                msg_raw=msg,
+                owner_str=owner_str
+            )
 
     def process_outgoing_message(self, msg_raw, originates_from_console=False):
         '''
@@ -225,6 +275,17 @@ class Conversation:
         :return: message to be sent to the server
         '''
 
+        participants = self.manager.get_other_users()
+
+        self.msg_keys[participants[0]], self.chain_keys[participants[0]] = self.get_keys_to_symmetric_ratchet(
+            self.session_keys[participants[0]])
+
+        print  "msg: " + self.msg_keys[participants[0]]
+        print  "chain: " + self.chain_keys[participants[0]]
+
+        iv = Random.new().read(AES.block_size)
+        cipher = AES.new(self.msg_keys[participants[0]], AES.MODE_CFB, iv)
+
         # if the message has been typed into the console, record it, so it is never printed again during chatting
         if originates_from_console == True:
             # message is already seen on the console
@@ -232,11 +293,15 @@ class Conversation:
                 owner_name=self.manager.user_name,
                 content=msg_raw
             )
+
             self.printed_messages.append(m)
 
-        # process outgoing message here
-		# example is base64 encoding, extend this with any crypto processing of your protocol
-        encoded_msg = base64.encodestring(msg_raw)
+        e_msg = iv + cipher.encrypt(msg_raw)
+
+        msg = str(self.manager.identity_key["public"]) + "|" + str(self.manager.signed_prekey["public"]) + "|" + str(
+            0) + "|" + e_msg
+
+        encoded_msg = base64.encodestring(msg)
 
         # post the message to the conversation
         self.manager.post_message_to_conversation(encoded_msg)

@@ -19,10 +19,14 @@ def main():
     if os.path.exists(sys.argv[1]) == False:
         print "Specified configuration file does not exists!"
         return
+
+    # sztem nem kell...
     credentials = {
         "user_name" : "",
         "password"  : ""
     }
+
+    # reg xy.json with {}
     with open(sys.argv[1]) as credentials_file:
         # Load credentials
         credentials = json.load(credentials_file)
