@@ -101,6 +101,7 @@ class ChatManager:
         print "Creating new conversation..."
         new_conversation = Conversation(participant_list)
         self.active_conversations.append(new_conversation)
+        return new_conversation.conversation_id
 
     def get_conversation(self, conversation_id):
         """

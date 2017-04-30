@@ -193,7 +193,7 @@ class ConversationCreateHandler(JsonHandler):
             # owner should be included as well!
             participants = self.request.arguments['participants']
             participants = json.loads(participants)
-            cm.create_conversation(participants)
+            id = cm.create_conversation(participants)
         except KeyError as e:
             print "KeyError during conversation creation!", e.message
             self.send_error(400, message=e.message)
@@ -203,7 +203,8 @@ class ConversationCreateHandler(JsonHandler):
             return
 
         self.set_status(200)
-        self.finish()
+        self.write(json.dumps([{"id": id}]))
+
 
 
 class ConcreteConversationHandler(JsonHandler):
