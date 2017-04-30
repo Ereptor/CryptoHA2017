@@ -168,6 +168,12 @@ class Conversation:
             with open(conversationkey_path, "r") as con_keys:
                 self.my_ratchet_keys = json.load(con_keys)
 
+        counterconversation_path = "counterconversation_" + str(self.id) + ".json"
+        if not os.path.exists(counterconversation_path):
+            with open("counterconversation_" + str(self.id) + ".json", "w") as counter_file:
+                counter_dict={"sent": 0, "received": 0}
+                json.dump(counter_dict, counter_file)
+
     def setup_pairwaise(self, part_a, part_b, sender_key):
 
         return
@@ -344,3 +350,24 @@ class Conversation:
         :return: number
         '''
         return len(self.all_messages)
+
+    def increase_sent_counter(self):
+        with open("counterconversation_" + str(self.id) + ".json", "r+") as counter_file:
+            count_dict = json.load(counter_file)
+            count_dict["sent"] += 1
+            json.dump(count_dict, counter_file)
+
+    def increase_received_counter(self):
+        with open("counterconversation_" + str(self.id) + ".json", "r+") as counter_file:
+            count_dict = json.load(counter_file)
+            count_dict["received"] += 1
+            json.dump(count_dict, counter_file)
+
+    def get_sent_counter(self):
+        with open("counterconversation_" + str(self.id) + ".json", "r") as counter_file:
+            return json.load(counter_file)["sent"]
+
+
+    def get_received_counter(self):
+        with open("counterconversation_" + str(self.id) + ".json", "r") as counter_file:
+            return json.load(counter_file)["received"]
