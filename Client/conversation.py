@@ -54,6 +54,7 @@ class Conversation:
         self.chain_keys = {}
         self.msg_keys = {}
 
+        self.msg_key_old = 0
         self.shared_key = 0
 
     def append_msg_to_process(self, msg_json):
@@ -362,10 +363,46 @@ class Conversation:
                         self.print_message(msg_raw=self.aes_cbc_decrypting(iv, msg_key, secret_msg),
                                            owner_str=owner_str)
                     else:
+                        print "other mac error"
                         self.print_message(msg_raw="Mac error!", owner_str="Admin")
 
                 else:
                     self.print_message(msg_raw="Receive counter error!", owner_str="Admin")
+        else:
+            if not self.id in self.manager.self_made_conversation:
+                decoded_msg = base64.decodestring(msg_raw)
+
+                counter = decoded_msg[:10]
+                iv = decoded_msg[10:26]
+                secret_msg = decoded_msg[26:-AES.block_size * 2]
+                mac_iv = decoded_msg[-AES.block_size * 2:-AES.block_size]
+                mac = decoded_msg[-AES.block_size:]
+
+                rec_cntr = self.get_received_counter()
+
+                if rec_cntr <= int(counter.replace("x", "")):
+                    if self.msg_key_old == 0:
+                        msg_key, chain_key = self.get_keys_to_symmetric_ratchet(
+                            self.shared_key)
+                        self.shared_key = chain_key
+                    else:
+                        msg_key = self.msg_key_old
+
+                    self.increase_sent_counter()
+
+                    if self.mac_checking(mac_iv, msg_key, decoded_msg[:-AES.block_size * 2], mac):
+                        self.print_message(msg_raw=self.aes_cbc_decrypting(iv, msg_key, secret_msg),
+                                           owner_str=owner_str)
+                    else:
+                        print "sef mac error"
+                        self.print_message(msg_raw="Mac error!", owner_str="Admin")
+
+                else:
+                    self.print_message(msg_raw="Receive counter error!", owner_str="Admin")
+            
+
+
+
 
     def process_outgoing_message(self, msg_raw, originates_from_console=False):
         '''
@@ -388,18 +425,15 @@ class Conversation:
             msg_key, chain_key = self.get_keys_to_symmetric_ratchet(
                 self.shared_key)
 
+            if self.msg_key_old == 0:
+                self.msg_key_old = msg_key
+            else:
+                self.msg_key_old = msg_key
+
+
             self.shared_key = chain_key
 
             self.increase_sent_counter()
-
-            # if the message has been typed into the console, record it, so it is never printed again during chatting
-            if originates_from_console == True:
-                # message is already seen on the console
-                m = Message(
-                    owner_name=self.manager.user_name,
-                    content=msg_raw
-                )
-                self.printed_messages.append(m)
 
             iv_and_secret = self.aes_cbc_crypting(msg_key, msg_raw)
 
@@ -507,3 +541,8 @@ class Conversation:
         with open("counterconversation_" + str(self.id) + "_" + str(self.manager.user_name) + ".json",
                   "r") as counter_file:
             return json.load(counter_file)["received"]
+
+    def get_creator(self):
+        with open("counterconversation_" + str(self.id) + "_" + str(self.manager.user_name) + ".json",
+                  "r") as counter_file:
+            return json.load(counter_file)["creator"]

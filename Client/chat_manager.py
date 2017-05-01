@@ -8,6 +8,7 @@ from time import sleep
 from menu import menu
 
 from threading import Thread
+import os.path
 
 import base64
 
@@ -86,6 +87,12 @@ class ChatManager:
                 if(verifier.verify(keyhash, base64.b64decode(keys["signature"]))):
                     self.is_logged_in = True
                     print "Login successful"
+
+                    self_made_convs = "self_made_my_convs_" + str(self.user_name) + ".json"
+                    if os.path.exists(self_made_convs):
+                        self.get_self_made_convconversation()
+
+
                 else:
                     self.user_name=""
                     self.password=""
@@ -171,11 +178,35 @@ class ChatManager:
 
             string = r.read()
             id = json.loads(string)
-            self.self_made_conversation.append(id[0]["id"])
+
+            self.set_self_made_conversation(id)
+
 
         else:
             print "Please log in before creating new conversations"
             state = INIT
+
+
+
+
+    def get_self_made_convconversation(self):
+        with open("self_made_my_convs_" + str(self.user_name) + ".json",
+                  "r") as file:
+            self.self_made_conversation = [line.rstrip('\n') for line in file]
+
+
+
+    def set_self_made_conversation(self, id):
+        self.self_made_conversation.append(id[0]["id"])
+        self_made_convs = "self_made_my_convs_" + str(self.user_name) + ".json"
+        with open("self_made_my_convs_" + str(self.user_name) + ".json",
+                  "w") as file:
+            for item in self.self_made_conversation:
+                file.write("%s\n" % str(item))
+
+
+
+
 
     def get_other_users(self):
         '''
