@@ -192,7 +192,7 @@ class ChatManager:
     def get_self_made_convconversation(self):
         with open("self_made_my_convs_" + str(self.user_name) + ".json",
                   "r") as file:
-            self.self_made_conversation = [line.rstrip('\n') for line in file]
+            self.self_made_conversation = [int(line.rstrip('\n')) for line in file]
 
 
 

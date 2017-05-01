@@ -173,14 +173,17 @@ class Conversation:
 
             print participant + " : " + self.session_keys[participant]
 
-        counterconversation_path = "counterconversation_" + str(self.id) + ".json"
+        counterconversation_path = "counterconversation_" + str(self.id) + "_" + str(self.manager.user_name) + ".json"
         if not os.path.exists(counterconversation_path):
             with open("counterconversation_" + str(self.id) + "_" + str(self.manager.user_name) + ".json",
                       "w") as counter_file:
-                counter_dict = {"sent": 0, "received": 0}
+                if self.id in self.manager.self_made_conversation:
+                    counter_dict = {"sent": 0, "received": 0, "shared_key": 0}
+                else:
+                    counter_dict = {"sent": 0, "received": 0}
                 json.dump(counter_dict, counter_file)
 
-        if self.shared_key == 0 and self.id in self.manager.self_made_conversation:
+        if self.shared_key == 0 and self.id in self.manager.self_made_conversation and self.get_shared_key() == 0:
             self.print_message(msg_raw="Press enter for init...", owner_str="Admin")
 
     def setup_multi_conv(self):
@@ -189,6 +192,8 @@ class Conversation:
         key = ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(16))
 
         self.shared_key = key
+
+        self.set_shared_key(key)
 
         header = ""
 
@@ -350,6 +355,7 @@ class Conversation:
 
                 rec_cntr = self.get_received_counter()
 
+                print "111"
                 if rec_cntr <= int(counter.replace("x", "")):
                     msg_key, chain_key = self.get_keys_to_symmetric_ratchet(
                         self.shared_key)
@@ -369,7 +375,7 @@ class Conversation:
                 else:
                     self.print_message(msg_raw="Receive counter error!", owner_str="Admin")
         else:
-            if not self.id in self.manager.self_made_conversation:
+            if self.id not in self.manager.self_made_conversation:
                 decoded_msg = base64.decodestring(msg_raw)
 
                 counter = decoded_msg[:10]
@@ -380,6 +386,7 @@ class Conversation:
 
                 rec_cntr = self.get_received_counter()
 
+                print "222"
                 if rec_cntr <= int(counter.replace("x", "")):
                     if self.msg_key_old == 0:
                         msg_key, chain_key = self.get_keys_to_symmetric_ratchet(
@@ -396,13 +403,42 @@ class Conversation:
                     else:
                         print "sef mac error"
                         self.print_message(msg_raw="Mac error!", owner_str="Admin")
-
                 else:
                     self.print_message(msg_raw="Receive counter error!", owner_str="Admin")
-            
+            else:
+                if self.get_received_counter() == 0:
+                    print "333"
+                    self.increase_received_counter()
+                    self.shared_key = str(self.get_shared_key())
+                else:
+                    decoded_msg = base64.decodestring(msg_raw)
+                    print "444"
+                    counter = decoded_msg[:10]
+                    iv = decoded_msg[10:26]
+                    secret_msg = decoded_msg[26:-AES.block_size * 2]
+                    mac_iv = decoded_msg[-AES.block_size * 2:-AES.block_size]
+                    mac = decoded_msg[-AES.block_size:]
 
+                    rec_cntr = self.get_received_counter()
 
+                    if rec_cntr <= int(counter.replace("x", "")):
+                        if self.msg_key_old == 0:
+                            msg_key, chain_key = self.get_keys_to_symmetric_ratchet(
+                                self.shared_key)
+                            self.shared_key = chain_key
+                        else:
+                            msg_key = self.msg_key_old
 
+                        self.increase_sent_counter()
+
+                        if self.mac_checking(mac_iv, msg_key, decoded_msg[:-AES.block_size * 2], mac):
+                            self.print_message(msg_raw=self.aes_cbc_decrypting(iv, msg_key, secret_msg),
+                                               owner_str=owner_str)
+                        else:
+                            print "sef admin mac error"
+                            self.print_message(msg_raw="Mac error!", owner_str="Admin")
+                    else:
+                        self.print_message(msg_raw="Receive counter error!", owner_str="Admin")
 
     def process_outgoing_message(self, msg_raw, originates_from_console=False):
         '''
@@ -412,7 +448,7 @@ class Conversation:
         :return: message to be sent to the server
         '''
 
-        if self.shared_key == 0 and self.id in self.manager.self_made_conversation:
+        if self.shared_key == 0 and self.id in self.manager.self_made_conversation and self.get_shared_key() == 0:
             self.print_message(msg_raw="Init...", owner_str="Admin")
 
             # post the message to the conversation
@@ -425,11 +461,7 @@ class Conversation:
             msg_key, chain_key = self.get_keys_to_symmetric_ratchet(
                 self.shared_key)
 
-            if self.msg_key_old == 0:
-                self.msg_key_old = msg_key
-            else:
-                self.msg_key_old = msg_key
-
+            self.msg_key_old = msg_key
 
             self.shared_key = chain_key
 
@@ -542,7 +574,16 @@ class Conversation:
                   "r") as counter_file:
             return json.load(counter_file)["received"]
 
-    def get_creator(self):
+    def get_shared_key(self):
         with open("counterconversation_" + str(self.id) + "_" + str(self.manager.user_name) + ".json",
                   "r") as counter_file:
-            return json.load(counter_file)["creator"]
+            return json.load(counter_file)["shared_key"]
+
+    def set_shared_key(self, shared_key):
+        with open("counterconversation_" + str(self.id) + "_" + str(self.manager.user_name) + ".json",
+                  "r") as counter_file:
+            count_dict = json.load(counter_file)
+            count_dict["shared_key"] = shared_key
+        with open("counterconversation_" + str(self.id) + "_" + str(self.manager.user_name) + ".json",
+                  "w") as counter_file:
+            json.dump(count_dict, counter_file)
