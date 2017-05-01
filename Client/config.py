@@ -12,3 +12,5 @@ CREATE_CONVERSATION     = 2  # creation of a conversation state
 SELECT_CONVERSATION     = 3  # entring a conversation state
 IN_CONVERSATION         = 4  # chatting state
 STOP                    = 5  # stopping state (application exits, triggered by CTRL+c)
+                    
+DEBUG = False

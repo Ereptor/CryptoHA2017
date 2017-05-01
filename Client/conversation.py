@@ -170,8 +170,8 @@ class Conversation:
                 self.session_keys[participant] = str(diffie1) + str(diffie2)
             else:
                 self.session_keys[participant] = str(diffie2) + str(diffie1)
-
-            print participant + " : " + self.session_keys[participant]
+            if DEBUG:
+                print participant + " : " + self.session_keys[participant]
 
         counterconversation_path = "counterconversation_" + str(self.id) + "_" + str(self.manager.user_name) + ".json"
         if not os.path.exists(counterconversation_path):
@@ -317,7 +317,7 @@ class Conversation:
 
             if self.shared_key == 0 and self.id not in self.manager.self_made_conversation:
 
-                self.print_message(msg_raw="Init...", owner_str="Admin")
+                #self.print_message(msg_raw="Init...", owner_str="Admin")
 
                 decoded_msg = base64.decodestring(msg_raw)
 
@@ -339,7 +339,8 @@ class Conversation:
                                                           crypted_shared_key)
 
                 if self.mac_checking(mac_iv, self.shared_key, header, mac):
-                    self.print_message(msg_raw="Shared key OK! - " + self.shared_key, owner_str="Admin")
+                    if DEBUG:
+                        self.print_message(msg_raw="Shared key OK! - " + self.shared_key, owner_str="Admin")
                 else:
                     self.print_message(msg_raw="Mac error!", owner_str="Admin")
 
@@ -355,7 +356,6 @@ class Conversation:
 
                 rec_cntr = self.get_received_counter()
 
-                print "111"
                 if rec_cntr <= int(counter.replace("x", "")):
                     msg_key, chain_key = self.get_keys_to_symmetric_ratchet(
                         self.shared_key)
@@ -386,7 +386,6 @@ class Conversation:
 
                 rec_cntr = self.get_received_counter()
 
-                print "222"
                 if rec_cntr <= int(counter.replace("x", "")):
                     if self.msg_key_old == 0:
                         msg_key, chain_key = self.get_keys_to_symmetric_ratchet(
@@ -407,12 +406,10 @@ class Conversation:
                     self.print_message(msg_raw="Receive counter error!", owner_str="Admin")
             else:
                 if self.get_received_counter() == 0:
-                    print "333"
                     self.increase_received_counter()
                     self.shared_key = str(self.get_shared_key())
                 else:
                     decoded_msg = base64.decodestring(msg_raw)
-                    print "444"
                     counter = decoded_msg[:10]
                     iv = decoded_msg[10:26]
                     secret_msg = decoded_msg[26:-AES.block_size * 2]
@@ -454,7 +451,8 @@ class Conversation:
             # post the message to the conversation
             self.manager.post_message_to_conversation(self.setup_multi_conv())
 
-            self.print_message(msg_raw="Shared key sent.", owner_str="Admin")
+            #self.print_message(msg_raw="Shared key sent.", owner_str="Admin")
+            print "Done!"
 
         else:
 
