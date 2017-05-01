@@ -173,9 +173,6 @@ class ChatManager:
             id = json.loads(string)
             self.self_made_conversation.append(id[0]["id"])
 
-            print "Conversations: \n"
-
-            self.get_my_conversations()
         else:
             print "Please log in before creating new conversations"
             state = INIT
@@ -356,10 +353,6 @@ class ChatManager:
                 elif state == SELECT_CONVERSATION:
                     # User wants to enter a conversation
                     try:
-
-                        print "Conversations: \n"
-
-                        self.get_my_conversations()
 
                         # Read the conversation ID supplied by the user
                         conversation_id = raw_input("Which conversation do you wish to join? ")

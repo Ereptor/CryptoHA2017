@@ -17,6 +17,8 @@ from config import *
 from Crypto.Cipher import AES
 from Crypto import Random
 
+import sys
+
 
 class Conversation:
     '''
@@ -30,6 +32,7 @@ class Conversation:
         :param manager: instance of the ChatManager class
         :return: None
         '''
+
         self.id = c_id  # ID of the conversation
         self.all_messages = []  # all retrieved messages of the conversation
         self.printed_messages = []
@@ -50,6 +53,8 @@ class Conversation:
         self.root_keys = {}
         self.chain_keys = {}
         self.msg_keys = {}
+
+        self.shared_key = 0
 
     def append_msg_to_process(self, msg_json):
         '''
@@ -131,7 +136,9 @@ class Conversation:
         # Since there is no crypto in the current version, no preparation is needed, so do nothing
         # replace this with anything needed for your key exchange
 
-        for participant in self.manager.get_other_users():
+        participants = self.manager.get_other_users()
+
+        for participant in participants:
             # Get keys for participants in loop until right signature is returned:
             while True:
                 req = urllib2.Request("http://" + SERVER + ":" + SERVER_PORT + "/getKeys/" + participant)
@@ -161,18 +168,85 @@ class Conversation:
 
             print participant + " : " + self.session_keys[participant]
 
-        conversationkey_path = "conversationkeys_" + str(self.id) + ".json"
-        if not os.path.exists(conversationkey_path):
-            self.update_my_ratchet_key(diffie.generate_keys(), 0)
-        else:
-            with open(conversationkey_path, "r") as con_keys:
-                self.my_ratchet_keys = json.load(con_keys)
-
         counterconversation_path = "counterconversation_" + str(self.id) + ".json"
         if not os.path.exists(counterconversation_path):
             with open("counterconversation_" + str(self.id) + ".json", "w") as counter_file:
                 counter_dict = {"sent": 0, "received": 0}
                 json.dump(counter_dict, counter_file)
+
+        if len(participants) > 1 and self.shared_key == 0 and self.id in self.manager.self_made_conversation:
+            self.print_message(msg_raw="Press enter for init...", owner_str="Admin")
+
+    def setup_multi_conv(self):
+
+        # shared_key gen
+        key = "abcdef0123456789"
+
+        self.shared_key = key
+
+        header = ""
+
+        participants = self.manager.get_other_users()
+
+        for participant in participants:
+            self.msg_keys[participant], self.chain_keys[participant] = self.get_keys_to_symmetric_ratchet(
+                self.session_keys[participant])
+            header += str(participant) + self.aes_cbc_crypting(self.msg_keys[participant], key)
+
+        mac_iv, mac = self.mac_creating(key, header)
+
+        init_msg = header + mac_iv + mac
+
+        encoded_msg = base64.encodestring(init_msg)
+
+        return encoded_msg
+
+    def aes_cbc_decrypting(self, iv, key, secret):
+
+        cipher = AES.new(key, AES.MODE_CBC, iv)
+        msg = cipher.decrypt(secret)
+
+        # remove padding
+        if len(msg) != 16:
+            plain_msg = msg[:len(msg) - ord(msg[-1])]
+        else:
+            plain_msg = msg
+
+        return plain_msg
+
+    def aes_cbc_crypting(self, key, msg):
+
+        iv = Random.new().read(AES.block_size)
+        cipher = AES.new(key, AES.MODE_CBC, iv)
+
+        # padding
+        plength = AES.block_size - (len(msg) % AES.block_size)
+        msg += chr(plength) * plength
+
+        return iv + cipher.encrypt(msg)
+
+    def mac_creating(self, key, msg):
+        iv = Random.new().read(AES.block_size)
+        cipher = AES.new(key, AES.MODE_CBC, iv)
+
+        # padding
+        plength = AES.block_size - (len(msg) % AES.block_size)
+        msg += chr(plength) * plength
+
+        return iv, cipher.encrypt(msg)[-AES.block_size:]
+
+    def mac_checking(self, iv, key, msg, mac):
+
+        cipher = AES.new(key, AES.MODE_CBC, iv)
+
+        # padding
+        plength = AES.block_size - (len(msg) % AES.block_size)
+        msg += chr(plength) * plength
+
+        if cipher.encrypt(msg)[-AES.block_size:] == mac:
+            return True
+        else:
+            return False
 
     def update_last_ratchet_key(self, user_name, key):
         """ Update ratchet key list with last seen key for user """
@@ -202,6 +276,13 @@ class Conversation:
             return None
         return self.ratchet_keys[user_name]
 
+    def get_keys_to_asymmetric_ratchet(self, key1, key2):
+        """Use this function to get a temporary key and chain key or new root key and a new sender chain key"""
+        kdf = KDF.PBKDF2(key1, key2, 32)
+        new_key1 = kdf[:16]
+        new_key2 = kdf[16:]
+        return new_key1, new_key2
+
     def get_keys_to_symmetric_ratchet(self, key):
         """Use this function to get root key and chain key0 from session key or to get new chain key and message key from old chain key"""
 
@@ -209,13 +290,6 @@ class Conversation:
         key1 = kdf[:16]
         key2 = kdf[16:]
         return key1, key2
-
-    def get_keys_to_asymmetric_ratchet(self, key1, key2):
-        """Use this function to get a temporary key and chain key or new root key and a new sender chain key"""
-        kdf = KDF.PBKDF2(key1, key2, 32)
-        new_key1 = kdf[:16]
-        new_key2 = kdf[16:]
-        return new_key1, new_key2
 
     def process_incoming_message(self, msg_raw, msg_id, owner_str):
         '''
@@ -229,46 +303,78 @@ class Conversation:
         '''
 
         if self.manager.user_name != owner_str:
-            # process message here
-            # example is base64 decoding, extend this with any crypto processing of your protocol
-            decoded_msg = base64.decodestring(msg_raw)
 
-            counter = decoded_msg[:10]
-            iv = decoded_msg[10:26]
-            secret_msg = decoded_msg[26:-AES.block_size]
-            mac = decoded_msg[-AES.block_size:]
+            if len(
+                    self.manager.get_other_users()) > 1 and self.shared_key == 0 and self.id not in self.manager.self_made_conversation:
+                self.print_message(msg_raw="Init...", owner_str="Admin")
 
-            rec_cntr = self.get_received_counter()
+                decoded_msg = base64.decodestring(msg_raw)
 
-            if rec_cntr <= int(counter.replace("x", "")):
-                if rec_cntr == 0:
-                    self.msg_keys[owner_str], self.chain_keys[owner_str] = self.get_keys_to_symmetric_ratchet(
-                        self.session_keys[owner_str])
-                else:
-                    self.msg_keys[owner_str], self.chain_keys[owner_str] = self.get_keys_to_symmetric_ratchet(
-                        self.chain_keys[owner_str])
+                header = decoded_msg[:-32]
+                mac_iv = decoded_msg[-32:-16]
+                mac = decoded_msg[-16:]
 
-                self.increase_received_counter()
+                name_index = header.rfind(str(self.manager.user_name)) + len(
+                    str(self.manager.user_name))
 
-                cipher = AES.new(self.msg_keys[owner_str], AES.MODE_CBC, iv)
+                iv_and_crypted_shared_key = header[name_index:name_index + 32]
+                crypted_shared_key_iv = iv_and_crypted_shared_key[:16]
+                crypted_shared_key = iv_and_crypted_shared_key[16:]
 
-                msg = cipher.decrypt(secret_msg)
+                self.msg_keys[owner_str], self.chain_keys[owner_str] = self.get_keys_to_symmetric_ratchet(
+                    self.session_keys[owner_str])
 
-                # remove padding
-                plain_msg = msg[:len(msg) - ord(msg[-1])]
+                self.shared_key = self.aes_cbc_decrypting(crypted_shared_key_iv, self.msg_keys[owner_str],
+                                                          crypted_shared_key)
 
-                # padding_mac
-                content = decoded_msg[:-AES.block_size]
-                plength = AES.block_size - (len(content) % AES.block_size)
-                content += chr(plength) * plength
-
-                if mac == cipher.encrypt(content)[-AES.block_size:]:
-                    # print message and add it to the list of printed messages
-                    self.print_message(msg_raw=plain_msg, owner_str=owner_str)
+                if self.mac_checking(mac_iv, self.shared_key, header, mac):
+                    self.print_message(msg_raw=self.shared_key, owner_str="Admin")
                 else:
                     self.print_message(msg_raw="Mac error!", owner_str="Admin")
+
             else:
-                self.print_message(msg_raw="Receive counter error!", owner_str="Admin")
+                
+
+                # process message here
+                # example is base64 decoding, extend this with any crypto processing of your protocol
+                decoded_msg = base64.decodestring(msg_raw)
+
+                counter = decoded_msg[:10]
+                iv = decoded_msg[10:26]
+                secret_msg = decoded_msg[26:-AES.block_size]
+                mac = decoded_msg[-AES.block_size:]
+
+                rec_cntr = self.get_received_counter()
+
+                if rec_cntr <= int(counter.replace("x", "")):
+                    if rec_cntr == 0:
+                        self.msg_keys[owner_str], self.chain_keys[owner_str] = self.get_keys_to_symmetric_ratchet(
+                            self.session_keys[owner_str])
+                    else:
+                        self.msg_keys[owner_str], self.chain_keys[owner_str] = self.get_keys_to_symmetric_ratchet(
+                            self.chain_keys[owner_str])
+
+                    self.increase_received_counter()
+
+                    cipher = AES.new(self.msg_keys[owner_str], AES.MODE_CBC, iv)
+
+                    msg = cipher.decrypt(secret_msg)
+
+                    # remove padding
+                    plain_msg = msg[:len(msg) - ord(msg[-1])]
+
+                    # padding_mac
+                    content = decoded_msg[:-AES.block_size]
+                    plength = AES.block_size - (len(content) % AES.block_size)
+                    content += chr(plength) * plength
+
+                    if mac == cipher.encrypt(content)[-AES.block_size:]:
+                        # print message and add it to the list of printed messages
+                        self.print_message(msg_raw="Shared key OK!", owner_str=owner_str)
+                    else:
+                        self.print_message(msg_raw="Mac error!", owner_str="Admin")
+                else:
+                    self.print_message(msg_raw="Receive counter error!", owner_str="Admin")
 
     def process_outgoing_message(self, msg_raw, originates_from_console=False):
         '''
@@ -278,48 +384,58 @@ class Conversation:
         :return: message to be sent to the server
         '''
 
-        participants = self.manager.get_other_users()
+        if self.manager.get_other_users() > 1 and self.shared_key == 0 and self.id in self.manager.self_made_conversation:
+            self.print_message(msg_raw="Init...", owner_str="Admin")
 
-        if self.get_sent_counter() == 0:
-            self.msg_keys[participants[0]], self.chain_keys[participants[0]] = self.get_keys_to_symmetric_ratchet(
-                self.session_keys[participants[0]])
+            # post the message to the conversation
+            self.manager.post_message_to_conversation(self.setup_multi_conv())
+
+            self.print_message(msg_raw="Shared key sent.", owner_str="Admin")
+
         else:
-            self.msg_keys[participants[0]], self.chain_keys[participants[0]] = self.get_keys_to_symmetric_ratchet(
-                self.chain_keys[participants[0]])
 
-        self.increase_sent_counter()
+            participants = self.manager.get_other_users()
 
-        # if the message has been typed into the console, record it, so it is never printed again during chatting
-        if originates_from_console == True:
-            # message is already seen on the console
-            m = Message(
-                owner_name=self.manager.user_name,
-                content=msg_raw
-            )
-            self.printed_messages.append(m)
+            if self.get_sent_counter() == 0:
+                self.msg_keys[participants[0]], self.chain_keys[participants[0]] = self.get_keys_to_symmetric_ratchet(
+                    self.session_keys[participants[0]])
+            else:
+                self.msg_keys[participants[0]], self.chain_keys[participants[0]] = self.get_keys_to_symmetric_ratchet(
+                    self.chain_keys[participants[0]])
 
-        iv = Random.new().read(AES.block_size)
-        cipher = AES.new(self.msg_keys[participants[0]], AES.MODE_CBC, iv)
+            self.increase_sent_counter()
 
-        # padding
-        plength = AES.block_size - (len(msg_raw) % AES.block_size)
-        msg_raw += chr(plength) * plength
+            # if the message has been typed into the console, record it, so it is never printed again during chatting
+            if originates_from_console == True:
+                # message is already seen on the console
+                m = Message(
+                    owner_name=self.manager.user_name,
+                    content=msg_raw
+                )
+                self.printed_messages.append(m)
 
-        sent = self.get_sent_counter()
-        cntr_pad = 10 - len(str(sent))
+            iv = Random.new().read(AES.block_size)
+            cipher = AES.new(self.msg_keys[participants[0]], AES.MODE_CBC, iv)
 
-        msg = (str(sent) + "x" * cntr_pad) + iv + cipher.encrypt(msg_raw)
+            # padding
+            plength = AES.block_size - (len(msg_raw) % AES.block_size)
+            msg_raw += chr(plength) * plength
 
-        # padding_mac
-        plength = AES.block_size - (len(msg) % AES.block_size)
-        msg_mac = msg + chr(plength) * plength
+            sent = self.get_sent_counter()
+            cntr_pad = 10 - len(str(sent))
 
-        mac = cipher.encrypt(msg_mac)[-AES.block_size:]
+            msg = (str(sent) + "x" * cntr_pad) + iv + cipher.encrypt(msg_raw)
 
-        encoded_msg = base64.encodestring(msg + mac)
+            # padding_mac
+            plength = AES.block_size - (len(msg) % AES.block_size)
+            msg_mac = msg + chr(plength) * plength
 
-        # post the message to the conversation
-        self.manager.post_message_to_conversation(encoded_msg)
+            mac = cipher.encrypt(msg_mac)[-AES.block_size:]
+
+            encoded_msg = base64.encodestring(msg + mac)
+
+            # post the message to the conversation
+            self.manager.post_message_to_conversation(encoded_msg)
 
     def print_message(self, msg_raw, owner_str):
         '''
