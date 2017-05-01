@@ -81,6 +81,10 @@ class Conversation:
 
         :return:
         '''
+
+        self.set_sent_counter(0)
+        self.set_received_counter(0)
+
         self.run_infinite_loop = False
         if self.msg_process_loop_started == True:
             self.msg_process_loop.join()
@@ -399,7 +403,14 @@ class Conversation:
 
             iv_and_secret = self.aes_cbc_crypting(msg_key, msg_raw)
 
-            sent = self.get_received_counter() + 1
+            cntr_rec = self.get_received_counter()
+            cntr_sen = self.get_sent_counter()
+
+            if cntr_rec > cntr_sen:
+                sent = self.get_received_counter() + 1
+            else:
+                sent = self.get_sent_counter() + 1
+
             self.set_sent_counter(sent)
             cntr_pad = 10 - len(str(sent))
 
@@ -456,6 +467,15 @@ class Conversation:
                   "r") as counter_file:
             count_dict = json.load(counter_file)
             count_dict["sent"] = nmr
+        with open("counterconversation_" + str(self.id) + "_" + str(self.manager.user_name) + ".json",
+                  "w") as counter_file:
+            json.dump(count_dict, counter_file)
+
+    def set_received_counter(self, nmr):
+        with open("counterconversation_" + str(self.id) + "_" + str(self.manager.user_name) + ".json",
+                  "r") as counter_file:
+            count_dict = json.load(counter_file)
+            count_dict["received"] = nmr
         with open("counterconversation_" + str(self.id) + "_" + str(self.manager.user_name) + ".json",
                   "w") as counter_file:
             json.dump(count_dict, counter_file)
